@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .models import ProductInfo, Shop, Category, Product, User
+from .models import ProductInfo, Shop, Category, Product, User, Order, OrderItem
 
 
 class ProductInfoInline(admin.TabularInline):
@@ -10,6 +10,10 @@ class ProductInfoInline(admin.TabularInline):
 
 class ProductInline(admin.TabularInline):
     model = Product
+
+
+class OrderItemInline(admin.TabularInline):
+    model = OrderItem
 
 
 @admin.register(Product)
@@ -34,6 +38,13 @@ class ShopAdmin(admin.ModelAdmin):
 class CategoryAdmin(admin.ModelAdmin):
     list_display = ('id', 'name')
     inlines = [ProductInline]
+
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    list_display = ('id', 'status', 'dt', 'user', 'delivery_address')
+    list_filter = ('status',)
+    inlines = [OrderItemInline]
 
 
 @admin.register(User)
