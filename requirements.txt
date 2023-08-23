@@ -1,2 +1,12 @@
-Django==2.2.16
-pytz==2018.5
+django
+djangorestframework
+psycopg2-binary
+django_filter
+python-dotenv
+celery
+redis
+requests
+pytz
+pytest-django
+model_bakery
+pyyaml

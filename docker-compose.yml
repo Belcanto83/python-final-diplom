@@ -1,0 +1,100 @@
+version: "3.9"
+
+volumes:
+  postgresql_vol:
+  static_vol:
+
+networks:
+  dev_network:
+
+services:
+  redis:
+    container_name: redis_db
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    networks:
+      dev_network:
+        aliases:
+          - redis_db
+  postgresql_db:
+    image: postgres:alpine
+#    ports:
+#      - "5433:5432"
+#    restart: unless-stopped
+    networks:
+      dev_network:
+    volumes:
+      - postgresql_vol:/var/lib/postgresql/data
+      - ./postgresql/logs:/var/log
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d orders"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+  celery:
+    build:
+      context: .
+    environment:
+      BROKER: ${BROKER}
+      BACKEND: ${BACKEND}
+    command:
+      - "/bin/sh"
+      - -c
+      - |
+        celery -A orders worker -l info -P threads
+#        celery -A orders beat -l info
+    depends_on:
+      - redis
+    networks:
+      dev_network:
+    volumes:
+      - ./:/usr/src/app
+#  celery-beat:
+#    build:
+#      context: .
+#    environment:
+#      BROKER: ${BROKER}
+#      BACKEND: ${BACKEND}
+#    command:
+#      - "/bin/sh"
+#      - -c
+#      - |
+#        celery -A orders beat -l info
+#    depends_on:
+#      - redis
+#      - celery
+#    networks:
+#      dev_network:
+#    volumes:
+#      - ./:/usr/src/app
+  orders:
+    build: .
+    command:
+      - "/bin/sh"
+      - -c
+      - |
+        python manage.py migrate
+        python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - static_vol:/usr/src/app/static
+    expose:
+      - 8000
+    env_file:
+      - ./.env
+#    environment:
+#      POSTGRES_DB: ${DB_NAME}
+#      POSTGRES_USER: ${DB_USER}
+#      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "8000:8000"
+    networks:
+      dev_network:
+#    restart: unless-stopped
+    depends_on:
+      - postgresql_db

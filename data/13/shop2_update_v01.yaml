@@ -1,0 +1,30 @@
+shop: Связной
+categories:
+  - id: 2
+    name: Смартфоны
+  - id: 1
+    name: Flash-накопители
+
+goods:
+  - id: 42162
+    category: 2
+    model: samsung
+    name: Смартфон Samsung N10 (чёрный)
+    price: 95000
+    price_rrc: 110000
+    quantity: 120
+    parameters:
+      "Диагональ (дюйм)": 7.5
+      "Разрешение (пикс)": 2688x1242
+      "Встроенная память (Гб)": 256
+      "Цвет": чёрный
+  - id: 42163
+    category: 1
+    model: samsung super-flash
+    name: Накопитель samsung super-flash 256GB (красный)
+    price: 25000
+    price_rrc: 29990
+    quantity: 80
+    parameters:
+      "Объём (Гб)": 256
+      "Цвет": красный
