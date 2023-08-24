@@ -29,3 +29,13 @@ def send_reset_pass_email(link: str, to_user_list: list, from_user=settings.EMAI
         to_user_list,
         fail_silently=False
     )
+
+
+def send_email(subject: str, message: str, to_user_list: list, from_user=settings.EMAIL_HOST_USER):
+    send_mail(
+        subject,
+        message,
+        from_user,
+        to_user_list,
+        fail_silently=True
+    )

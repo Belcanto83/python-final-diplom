@@ -8,6 +8,7 @@ from rest_framework.serializers import ModelSerializer
 from .errors import IncorrectFileFormatError
 from .models import Shop, User, Category, Product, ProductInfo, Parameter, ProductParameter, Order, OrderItem, \
     UserTypeChoices
+from .tasks import import_goods, update_goods
 
 
 class UserSerializer(ModelSerializer):
@@ -61,50 +62,51 @@ class ShopSerializer(ModelSerializer):
         shop = super().create(validated_data)
         if validated_data.get('filename', None):
             f_name = os.path.join(settings.MEDIA_ROOT, str(shop.id), validated_data["filename"].name)
-            try:
-                with open(f_name, encoding='utf-8') as f:
-                    shop_products = yaml.load(f, Loader=yaml.FullLoader)
-                # Проходим по очереди по всем категориям
-                for category in shop_products['categories']:
-                    category_object, created = Category.objects.get_or_create(name=category['name'],
-                                                                              defaults={'name': category['name']})
-                    category_object.shops.add(shop)
-                    # Создаём продукты определённой категории
-                    category_products = list(
-                        filter(lambda itm: itm['category'] == category['id'], shop_products['goods']))
-                    products = []
-                    for product in category_products:
-                        product_object, created = Product.objects.get_or_create(
-                            name=product['name'],
-                            category=category_object,
-                            defaults={'name': product['name'], 'category': category_object}
-                        )
-                        products.append(product_object)
-                    # products = [Product(name=itm["name"], category=category_object) for itm in category_products]
-                    # products = Product.objects.bulk_create(products)
-                    product_infos = [ProductInfo(
-                        name=itm["name"],
-                        quantity=itm["quantity"],
-                        price=itm["price"],
-                        price_rrc=itm["price_rrc"],
-                        product=products[ind],
-                        shop=shop,
-                        article_nr=itm["id"]
-                    ) for ind, itm in enumerate(category_products)]
-                    product_infos = ProductInfo.objects.bulk_create(product_infos)
-                    # Создаём параметры для каждого продукта определённой категории
-                    for ind, product in enumerate(category_products):
-                        for key, value in product['parameters'].items():
-                            parameter_object, created = Parameter.objects.get_or_create(name=key,
-                                                                                        defaults={'name': key})
-                            product_parameter = ProductParameter(
-                                value=value,
-                                parameter=parameter_object,
-                                product_info=product_infos[ind]
-                            )
-                            product_parameter.save()
-            except:
-                raise IncorrectFileFormatError('File has incorrect format')
+            import_goods.delay(f_name, shop)
+            # try:
+            #     with open(f_name, encoding='utf-8') as f:
+            #         shop_products = yaml.load(f, Loader=yaml.FullLoader)
+            #     # Проходим по очереди по всем категориям
+            #     for category in shop_products['categories']:
+            #         category_object, created = Category.objects.get_or_create(name=category['name'],
+            #                                                                   defaults={'name': category['name']})
+            #         category_object.shops.add(shop)
+            #         # Создаём продукты определённой категории
+            #         category_products = list(
+            #             filter(lambda itm: itm['category'] == category['id'], shop_products['goods']))
+            #         products = []
+            #         for product in category_products:
+            #             product_object, created = Product.objects.get_or_create(
+            #                 name=product['name'],
+            #                 category=category_object,
+            #                 defaults={'name': product['name'], 'category': category_object}
+            #             )
+            #             products.append(product_object)
+            #         # products = [Product(name=itm["name"], category=category_object) for itm in category_products]
+            #         # products = Product.objects.bulk_create(products)
+            #         product_infos = [ProductInfo(
+            #             name=itm["name"],
+            #             quantity=itm["quantity"],
+            #             price=itm["price"],
+            #             price_rrc=itm["price_rrc"],
+            #             product=products[ind],
+            #             shop=shop,
+            #             article_nr=itm["id"]
+            #         ) for ind, itm in enumerate(category_products)]
+            #         product_infos = ProductInfo.objects.bulk_create(product_infos)
+            #         # Создаём параметры для каждого продукта определённой категории
+            #         for ind, product in enumerate(category_products):
+            #             for key, value in product['parameters'].items():
+            #                 parameter_object, created = Parameter.objects.get_or_create(name=key,
+            #                                                                             defaults={'name': key})
+            #                 product_parameter = ProductParameter(
+            #                     value=value,
+            #                     parameter=parameter_object,
+            #                     product_info=product_infos[ind]
+            #                 )
+            #                 product_parameter.save()
+            # except:
+            #     raise IncorrectFileFormatError('File has incorrect format')
         return shop
 
     def update(self, instance, validated_data):
@@ -112,45 +114,46 @@ class ShopSerializer(ModelSerializer):
         shop = super().update(instance, validated_data)
         if validated_data.get('filename', None):
             f_name = os.path.join(settings.MEDIA_ROOT, shop.filename.name)
-            try:
-                with open(f_name, encoding='utf-8') as f:
-                    shop_products = yaml.load(f, Loader=yaml.FullLoader)
-                # Проходим по очереди по всем категориям
-                for category in shop_products['categories']:
-                    category_object, created = Category.objects.get_or_create(name=category['name'],
-                                                                              defaults={'name': category['name']})
-                    # Создаём новую категорию товаров в данном магазине, только если её ещё нет!
-                    if created:
-                        category_object.shops.add(shop)
-                    # Обновляем(!) ИМЕЮЩИЕСЯ или создаём(!) НОВЫЕ продукты определённой категории
-                    category_products = list(
-                        filter(lambda itm: itm['category'] == category['id'], shop_products['goods']))
-                    for product in category_products:
-                        product_object, created = Product.objects.get_or_create(
-                            name=product['name'],
-                            category=category_object,
-                            defaults={'name': product['name'], 'category': category_object}
-                        )
-                        product_info, created = ProductInfo.objects.update_or_create(shop=shop, product=product_object,
-                                                                                     defaults={'name': product['name'],
-                                                                                               'quantity': product[
-                                                                                                   'quantity'],
-                                                                                               'price': product[
-                                                                                                   'price'],
-                                                                                               'price_rrc': product[
-                                                                                                   'price_rrc'],
-                                                                                               'article_nr': product[
-                                                                                                   'id']})
-                        # Создаём параметры для каждого продукта определённой категории
-                        for key, value in product['parameters'].items():
-                            parameter_object, created = Parameter.objects.get_or_create(name=key,
-                                                                                        defaults={'name': key})
-                            ProductParameter.objects.update_or_create(parameter=parameter_object,
-                                                                      product_info=product_info,
-                                                                      defaults={'value': value})
-            except:
-                raise IncorrectFileFormatError('File has incorrect format')
-        # TODO 01: Реализовать механизм удаления записей, на которые нет внешних ссылок из связанных таблиц
+            update_goods.delay(f_name, shop)
+        #     try:
+        #         with open(f_name, encoding='utf-8') as f:
+        #             shop_products = yaml.load(f, Loader=yaml.FullLoader)
+        #         # Проходим по очереди по всем категориям
+        #         for category in shop_products['categories']:
+        #             category_object, created = Category.objects.get_or_create(name=category['name'],
+        #                                                                       defaults={'name': category['name']})
+        #             # Создаём новую категорию товаров в данном магазине, только если её ещё нет!
+        #             if created:
+        #                 category_object.shops.add(shop)
+        #             # Обновляем(!) ИМЕЮЩИЕСЯ или создаём(!) НОВЫЕ продукты определённой категории
+        #             category_products = list(
+        #                 filter(lambda itm: itm['category'] == category['id'], shop_products['goods']))
+        #             for product in category_products:
+        #                 product_object, created = Product.objects.get_or_create(
+        #                     name=product['name'],
+        #                     category=category_object,
+        #                     defaults={'name': product['name'], 'category': category_object}
+        #                 )
+        #                 product_info, created = ProductInfo.objects.update_or_create(shop=shop, product=product_object,
+        #                                                                              defaults={'name': product['name'],
+        #                                                                                        'quantity': product[
+        #                                                                                            'quantity'],
+        #                                                                                        'price': product[
+        #                                                                                            'price'],
+        #                                                                                        'price_rrc': product[
+        #                                                                                            'price_rrc'],
+        #                                                                                        'article_nr': product[
+        #                                                                                            'id']})
+        #                 # Создаём параметры для каждого продукта определённой категории
+        #                 for key, value in product['parameters'].items():
+        #                     parameter_object, created = Parameter.objects.get_or_create(name=key,
+        #                                                                                 defaults={'name': key})
+        #                     ProductParameter.objects.update_or_create(parameter=parameter_object,
+        #                                                               product_info=product_info,
+        #                                                               defaults={'value': value})
+        #     except:
+        #         raise IncorrectFileFormatError('File has incorrect format')
+        # # TODO 01: Реализовать механизм удаления записей, на которые нет внешних ссылок из связанных таблиц
         return shop
 
 
